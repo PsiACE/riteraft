@@ -35,7 +35,7 @@ impl Mailbox {
             proposal: message,
             chan: tx,
         };
-        let mut sender = self.0.clone();
+        let sender = self.0.clone();
         // TODO make timeout duration a variable
         match sender.send(proposal).await {
             Ok(_) => match timeout(Duration::from_secs(2), rx).await {
@@ -51,7 +51,7 @@ impl Mailbox {
         // set node id to 0, the node will set it to self when it receives it.
         change.set_node_id(0);
         change.set_change_type(ConfChangeType::RemoveNode);
-        let mut sender = self.0.clone();
+        let sender = self.0.clone();
         let (chan, rx) = oneshot::channel();
         match sender.send(Message::ConfigChange { change, chan }).await {
             Ok(_) => match rx.await {

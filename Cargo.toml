@@ -17,15 +17,15 @@ heed = "0.10.6"
 heed-traits = "0.7"
 log = { version = "0.4", features = ["std"] }
 parking_lot = "0.11"
-prost = "0.6"
-raft = { package = "raft", git = "https://github.com/tikv/raft-rs.git", rev = "eec5ead3ebe8f790154c94cb5f5adb0063a674e9", features = ["prost-codec"], default-features = false }
+prost = "0.7"
+raft = { package = "raft", git = "https://github.com/tikv/raft-rs.git", rev = "cc0ed97", features = ["prost-codec"], default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 slog = "2"
 thiserror = "1.0"
-tokio = { version = "0.2", features = ["full"] }
-tonic = "0.3"
+tokio = { version = "1", features = ["full"] }
+tonic = "0.4"
 zerocopy = "0.3.0"
 
 [build-dependencies]
-tonic-build = "0.3"
+tonic-build = "0.4"
 

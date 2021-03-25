@@ -44,7 +44,7 @@ impl RaftService for RaftServer {
         &self,
         _: Request<Empty>,
     ) -> Result<Response<raft_service::IdRequestReponse>, Status> {
-        let mut sender = self.snd.clone();
+        let sender = self.snd.clone();
         let (tx, rx) = oneshot::channel();
         let _ = sender.send(Message::RequestId { chan: tx }).await;
         let response = rx.await.unwrap();
@@ -72,7 +72,7 @@ impl RaftService for RaftServer {
         req: Request<ConfChange>,
     ) -> Result<Response<raft_service::RaftResponse>, Status> {
         let change = req.into_inner();
-        let mut sender = self.snd.clone();
+        let sender = self.snd.clone();
 
         let (tx, rx) = oneshot::channel();
 
@@ -106,7 +106,7 @@ impl RaftService for RaftServer {
     ) -> Result<Response<raft_service::RaftResponse>, Status> {
         let message = request.into_inner();
         // again this ugly shit to serialize the message
-        let mut sender = self.snd.clone();
+        let sender = self.snd.clone();
         match sender.send(Message::Raft(Box::new(message))).await {
             Ok(_) => (),
             Err(_) => error!("send error"),

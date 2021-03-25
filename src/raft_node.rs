@@ -43,7 +43,7 @@ impl MessageSender {
                 Err(e) => {
                     if current_retry < self.max_retries {
                         current_retry += 1;
-                        tokio::time::delay_for(self.timeout).await;
+                        tokio::time::sleep(self.timeout).await;
                     } else {
                         debug!(
                             "error sending message after {} retries: {}",
@@ -355,26 +355,28 @@ impl<S: Store + 'static> RaftNode<S> {
             store.set_hard_state(hs).unwrap();
         }
 
-        for message in ready.messages.drain(..) {
-            debug!(
-                "message from {} to {}",
-                message.get_from(),
-                message.get_to()
-            );
-            let client = match self.peer_mut(message.get_to()) {
-                Some(ref peer) => peer.client.clone(),
-                None => continue,
-            };
+        for vec_messages in ready.take_messages() {
+            for message in vec_messages {
+                debug!(
+                    "message from {} to {}",
+                    message.get_from(),
+                    message.get_to()
+                );
+                let client = match self.peer_mut(message.get_to()) {
+                    Some(ref peer) => peer.client.clone(),
+                    None => continue,
+                };
 
-            let message_sender = MessageSender {
-                client_id: message.get_to(),
-                client: client.clone(),
-                chan: self.snd.clone(),
-                message,
-                timeout: Duration::from_millis(100),
-                max_retries: 5,
-            };
-            tokio::spawn(message_sender.send());
+                let message_sender = MessageSender {
+                    client_id: message.get_to(),
+                    client: client.clone(),
+                    chan: self.snd.clone(),
+                    message,
+                    timeout: Duration::from_millis(100),
+                    max_retries: 5,
+                };
+                tokio::spawn(message_sender.send());
+            }
         }
 
         if !ready.snapshot().is_empty() {
@@ -390,25 +392,23 @@ impl<S: Store + 'static> RaftNode<S> {
             store.set_hard_state(hs)?;
         }
 
-        if let Some(committed_entries) = ready.committed_entries.take() {
-            let mut _last_apply_index = 0;
-            for entry in &committed_entries {
-                // Mostly, you need to save the last apply index to resume applying
-                // after restart. Here we just ignore this because we use a Memory storage.
-                _last_apply_index = entry.get_index();
+        let mut _last_apply_index: u64 = 0;
+        for entry in ready.take_committed_entries() {
+            // Mostly, you need to save the last apply index to resume applying
+            // after restart. Here we just ignore this because we use a Memory storage.
+            _last_apply_index = entry.get_index();
 
-                if entry.get_data().is_empty() {
-                    // Emtpy entry, when the peer becomes Leader it will send an empty entry.
-                    continue;
-                }
+            if entry.get_data().is_empty() {
+                // Emtpy entry, when the peer becomes Leader it will send an empty entry.
+                continue;
+            }
 
-                match entry.get_entry_type() {
-                    EntryType::EntryNormal => self.handle_normal(&entry, client_send).await?,
-                    EntryType::EntryConfChange => {
-                        self.handle_config_change(&entry, client_send).await?
-                    }
-                    EntryType::EntryConfChangeV2 => unimplemented!(),
+            match entry.get_entry_type() {
+                EntryType::EntryNormal => self.handle_normal(&entry, client_send).await?,
+                EntryType::EntryConfChange => {
+                    self.handle_config_change(&entry, client_send).await?
                 }
+                EntryType::EntryConfChangeV2 => unimplemented!(),
             }
         }
         self.advance(ready);
