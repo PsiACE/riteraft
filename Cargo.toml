@@ -1,0 +1,32 @@
+[package]
+name = "riteraft"
+version = "0.1.0"
+authors = ["Chojan Shang <psiace@outlook.com>"]
+edition = "2018"
+
+[dependencies]
+async-trait = "0.1.38"
+bincode = "1.3.2"
+futures = "0.3.5"
+futures-retry = "0.5.0"
+heed = "0.8.1"
+heed-traits = "0.7.0"
+log = { version = "0.4", features = ["std"] }
+prost = "0.6"
+raftrs = { package = "raft", git = "https://github.com/tikv/raft-rs.git", rev = "eec5ead3ebe8f790154c94cb5f5adb0063a674e9", features = ["prost-codec"], default-features = false }
+serde = { version = "1.0", features = ["derive"] }
+slog = "2"
+thiserror = "1.0"
+tokio = { version = "0.2", features = ["full"] }
+tonic = "0.3"
+zerocopy = "0.3.0"
+
+[build-dependencies]
+tonic-build = "0.3"
+
+[dev-dependencies]
+tempdir = "0.3.7"
+
+[lib]
+name = "riteraft"
+path = "src/lib.rs"

@@ -1,0 +1,36 @@
+syntax = "proto3";
+package raftservice;
+
+import "eraftpb.proto";
+
+service RaftService {
+  rpc RequestId(Empty) returns (IdRequestReponse) {}
+  rpc ChangeConfig(eraftpb.ConfChange) returns (RaftResponse) {}
+  rpc SendMessage(eraftpb.Message) returns (RaftResponse) {}
+}
+
+enum ResultCode {
+  Ok            = 0;
+  Error         = 1;
+  WrongLeader   = 2;
+}
+
+message Proposal {
+  bytes inner = 1;
+}
+
+message IdRequestReponse{
+  ResultCode code = 1;
+  bytes data = 2;
+}
+
+message Empty {}
+
+message Entry {
+  uint64 key    = 1; 
+  string value  = 2;
+}
+
+message RaftResponse {
+  bytes inner = 2;
+}
