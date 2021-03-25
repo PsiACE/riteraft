@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use raftrs::eraftpb::{ConfChange, Message as RaftMessage};
+use raft::eraftpb::{ConfChange, Message as RaftMessage};
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot::Sender;
 

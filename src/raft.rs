@@ -8,7 +8,7 @@ use crate::raft_service::{Empty, ResultCode};
 use async_trait::async_trait;
 use bincode::{deserialize, serialize};
 use log::{info, warn};
-use raftrs::eraftpb::{ConfChange, ConfChangeType};
+use raft::eraftpb::{ConfChange, ConfChangeType};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
 use tonic::Request;

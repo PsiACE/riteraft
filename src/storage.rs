@@ -4,13 +4,14 @@ use heed::types::*;
 use heed::{Database, Env, PolyDatabase};
 use heed_traits::{BytesDecode, BytesEncode};
 use log::{info, warn};
+use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use prost::Message;
-use raftrs::prelude::*;
+use raft::prelude::*;
 
 use std::borrow::Cow;
 use std::fs;
 use std::path::Path;
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::Arc;
 
 pub trait LogStore: Storage {
     fn append(&mut self, entries: &[Entry]) -> Result<()>;
@@ -212,11 +213,11 @@ impl HeedStorage {
     }
 
     fn wl(&mut self) -> RwLockWriteGuard<HeedStorageCore> {
-        self.0.write().unwrap()
+        self.0.write()
     }
 
     fn rl(&self) -> RwLockReadGuard<HeedStorageCore> {
-        self.0.read().unwrap()
+        self.0.read()
     }
 }
 
@@ -293,19 +294,19 @@ impl LogStore for HeedStorage {
 }
 
 impl Storage for HeedStorage {
-    fn initial_state(&self) -> raftrs::Result<RaftState> {
+    fn initial_state(&self) -> raft::Result<RaftState> {
         let store = self.rl();
         let reader = store
             .env
             .read_txn()
-            .map_err(|e| raftrs::Error::Store(raftrs::StorageError::Other(e.into())))?;
+            .map_err(|e| raft::Error::Store(raft::StorageError::Other(e.into())))?;
         let raft_state = RaftState {
             hard_state: store
                 .hard_state(&reader)
-                .map_err(|e| raftrs::Error::Store(raftrs::StorageError::Other(e.into())))?,
+                .map_err(|e| raft::Error::Store(raft::StorageError::Other(e.into())))?,
             conf_state: store
                 .conf_state(&reader)
-                .map_err(|e| raftrs::Error::Store(raftrs::StorageError::Other(e.into())))?,
+                .map_err(|e| raft::Error::Store(raft::StorageError::Other(e.into())))?,
         };
         warn!("raft_state: {:#?}", raft_state);
         Ok(raft_state)
@@ -316,71 +317,71 @@ impl Storage for HeedStorage {
         low: u64,
         high: u64,
         max_size: impl Into<Option<u64>>,
-    ) -> raftrs::Result<Vec<Entry>> {
+    ) -> raft::Result<Vec<Entry>> {
         let store = self.rl();
         let entries = store
             .entries(low, high, max_size)
-            .map_err(|e| raftrs::Error::Store(raftrs::StorageError::Other(e.into())))?;
+            .map_err(|e| raft::Error::Store(raft::StorageError::Other(e.into())))?;
         Ok(entries)
     }
 
-    fn term(&self, idx: u64) -> raftrs::Result<u64> {
+    fn term(&self, idx: u64) -> raft::Result<u64> {
         let store = self.rl();
         let reader = store
             .env
             .read_txn()
-            .map_err(|_| raftrs::Error::Store(raftrs::StorageError::Unavailable))?;
+            .map_err(|_| raft::Error::Store(raft::StorageError::Unavailable))?;
         let first_index = store
             .first_index(&reader)
-            .map_err(|_| raftrs::Error::Store(raftrs::StorageError::Unavailable))?;
+            .map_err(|_| raft::Error::Store(raft::StorageError::Unavailable))?;
         let last_index = store
             .last_index(&reader)
-            .map_err(|_| raftrs::Error::Store(raftrs::StorageError::Unavailable))?;
+            .map_err(|_| raft::Error::Store(raft::StorageError::Unavailable))?;
         let hard_state = store
             .hard_state(&reader)
-            .map_err(|_| raftrs::Error::Store(raftrs::StorageError::Unavailable))?;
+            .map_err(|_| raft::Error::Store(raft::StorageError::Unavailable))?;
         if idx == hard_state.commit {
             return Ok(hard_state.term);
         }
 
         if idx < first_index {
-            return Err(raftrs::Error::Store(raftrs::StorageError::Compacted));
+            return Err(raft::Error::Store(raft::StorageError::Compacted));
         }
 
         if idx > last_index {
-            return Err(raftrs::Error::Store(raftrs::StorageError::Unavailable));
+            return Err(raft::Error::Store(raft::StorageError::Unavailable));
         }
 
         let entry = store
             .entry(&reader, idx)
-            .map_err(|_| raftrs::Error::Store(raftrs::StorageError::Unavailable))?;
+            .map_err(|_| raft::Error::Store(raft::StorageError::Unavailable))?;
         Ok(entry.map(|e| e.term).unwrap_or(0))
     }
 
-    fn first_index(&self) -> raftrs::Result<u64> {
+    fn first_index(&self) -> raft::Result<u64> {
         let store = self.rl();
         let reader = store.env.read_txn().unwrap();
         store
             .first_index(&reader)
-            .map_err(|_| raftrs::Error::Store(raftrs::StorageError::Unavailable))
+            .map_err(|_| raft::Error::Store(raft::StorageError::Unavailable))
     }
 
-    fn last_index(&self) -> raftrs::Result<u64> {
+    fn last_index(&self) -> raft::Result<u64> {
         let store = self.rl();
         let reader = store.env.read_txn().unwrap();
         let last_index = store
             .last_index(&reader)
-            .map_err(|_| raftrs::Error::Store(raftrs::StorageError::Unavailable))?;
+            .map_err(|_| raft::Error::Store(raft::StorageError::Unavailable))?;
 
         Ok(last_index)
     }
 
-    fn snapshot(&self, _index: u64) -> raftrs::Result<Snapshot> {
+    fn snapshot(&self, _index: u64) -> raft::Result<Snapshot> {
         let store = self.rl();
         match store.snapshot() {
             Ok(Some(snapshot)) => Ok(snapshot),
-            _ => Err(raftrs::Error::Store(
-                raftrs::StorageError::SnapshotTemporarilyUnavailable,
+            _ => Err(raft::Error::Store(
+                raft::StorageError::SnapshotTemporarilyUnavailable,
             )),
         }
     }

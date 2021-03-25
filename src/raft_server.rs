@@ -7,7 +7,7 @@ use crate::raft_service::{self, Empty};
 
 use bincode::serialize;
 use log::{error, info, warn};
-use raftrs::eraftpb::{ConfChange, Message as RaftMessage};
+use raft::eraftpb::{ConfChange, Message as RaftMessage};
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::time::timeout;

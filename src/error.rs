@@ -5,7 +5,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, ThisError)]
 pub enum Error {
     #[error("raft error: `{0}`")]
-    RaftError(#[from] raftrs::Error),
+    RaftError(#[from] raft::Error),
     #[error("Error joining the cluster")]
     JoinError,
     #[error("gprc error: `{0}`")]
