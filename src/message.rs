@@ -1,16 +1,26 @@
 use std::collections::HashMap;
 
-use raftrs::eraftpb::{Message as RaftMessage, ConfChange};
-use serde::{Serialize, Deserialize};
+use raftrs::eraftpb::{ConfChange, Message as RaftMessage};
+use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot::Sender;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum RaftResponse {
-    WrongLeader { leader_id: u64, leader_addr: String },
-    JoinSuccess { assigned_id: u64, peer_addrs: HashMap<u64, String> },
-    IdReserved { id: u64 },
+    WrongLeader {
+        leader_id: u64,
+        leader_addr: String,
+    },
+    JoinSuccess {
+        assigned_id: u64,
+        peer_addrs: HashMap<u64, String>,
+    },
+    IdReserved {
+        id: u64,
+    },
     Error,
-    Response { data: Vec<u8> },
+    Response {
+        data: Vec<u8>,
+    },
     Ok,
 }
 
@@ -24,7 +34,11 @@ pub enum Message {
         change: ConfChange,
         chan: Sender<RaftResponse>,
     },
-    RequestId { chan: Sender<RaftResponse> },
-    ReportUnreachable { node_id: u64 },
-    Raft(RaftMessage),
+    RequestId {
+        chan: Sender<RaftResponse>,
+    },
+    ReportUnreachable {
+        node_id: u64,
+    },
+    Raft(Box<RaftMessage>),
 }

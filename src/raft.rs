@@ -1,17 +1,17 @@
+use crate::error::{Error, Result};
 use crate::message::{Message, RaftResponse};
 use crate::raft_node::RaftNode;
 use crate::raft_server::RaftServer;
 use crate::raft_service::raft_service_client::RaftServiceClient;
 use crate::raft_service::{Empty, ResultCode};
-use crate::error::{Error, Result};
 
+use async_trait::async_trait;
+use bincode::{deserialize, serialize};
 use log::{info, warn};
 use raftrs::eraftpb::{ConfChange, ConfChangeType};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
 use tonic::Request;
-use bincode::{deserialize, serialize};
-use async_trait::async_trait;
 
 use std::time::Duration;
 
@@ -125,9 +125,7 @@ impl<S: Store + Send + Sync + 'static> Raft<S> {
                     continue;
                 }
                 ResultCode::Ok => break deserialize(&response.data)?,
-                ResultCode::Error => {
-                    return Err(Error::JoinError)
-                }
+                ResultCode::Error => return Err(Error::JoinError),
             }
         };
 
