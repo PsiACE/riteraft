@@ -98,7 +98,7 @@ async fn leave(data: web::Data<(Arc<Mailbox>, HashStore)>) -> impl Responder {
     "OK".to_string()
 }
 
-#[tokio::main]
+#[actix_rt::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let decorator = slog_term::TermDecorator::new().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
@@ -110,10 +110,6 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     let options = Options::from_args();
     let store = HashStore::new();
-
-    // setup runtime for actix
-    let local = tokio::task::LocalSet::new();
-    let _sys = actix_rt::System::run_in_tokio("server", &local);
 
     let raft = Raft::new(options.raft_addr, store.clone(), logger.clone());
     let mailbox = Arc::new(raft.mailbox());
