@@ -391,9 +391,9 @@ impl<S: Store + 'static> RaftNode<S> {
             let store = self.mut_store();
             store.set_hard_state(hs)?;
         }
-
+        let mut light = self.advance(ready);
         let mut _last_apply_index: u64 = 0;
-        for entry in ready.take_committed_entries() {
+        for entry in light.take_committed_entries() {
             // Mostly, you need to save the last apply index to resume applying
             // after restart. Here we just ignore this because we use a Memory storage.
             _last_apply_index = entry.get_index();
@@ -411,7 +411,6 @@ impl<S: Store + 'static> RaftNode<S> {
                 EntryType::EntryConfChangeV2 => unimplemented!(),
             }
         }
-        self.advance(ready);
         Ok(())
     }
 
