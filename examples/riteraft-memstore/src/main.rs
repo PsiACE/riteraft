@@ -8,7 +8,6 @@ use slog::Drain;
 use actix_web::{get, web, App, HttpServer, Responder};
 use async_trait::async_trait;
 use bincode::{deserialize, serialize};
-use log::info;
 use riteraft::{Mailbox, Raft, Result, Store};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -50,7 +49,7 @@ impl Store for HashStore {
             Message::Insert { key, value } => {
                 let mut db = self.0.write().unwrap();
                 db.insert(key, value.clone());
-                info!("inserted: ({}, {})", key, value);
+                log::info!("inserted: ({}, {})", key, value);
                 serialize(&value).unwrap()
             }
         };
@@ -115,12 +114,12 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mailbox = Arc::new(raft.mailbox());
     let (raft_handle, mailbox) = match options.peer_addr {
         Some(addr) => {
-            info!("running in follower mode");
+            log::info!("running in follower mode");
             let handle = tokio::spawn(raft.join(addr));
             (handle, mailbox)
         }
         None => {
-            info!("running in leader mode");
+            log::info!("running in leader mode");
             let handle = tokio::spawn(raft.lead());
             (handle, mailbox)
         }
