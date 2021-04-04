@@ -343,18 +343,6 @@ impl<S: Store + 'static> RaftNode<S> {
 
         let mut ready = self.ready();
 
-        if !ready.entries().is_empty() {
-            let entries = ready.entries();
-            let store = self.mut_store();
-            store.append(entries).unwrap();
-        }
-
-        if let Some(hs) = ready.hs() {
-            // Raft HardState changed, and we need to persist it.
-            let store = self.mut_store();
-            store.set_hard_state(hs).unwrap();
-        }
-
         for vec_messages in ready.take_messages() {
             for message in vec_messages {
                 debug!(
@@ -386,18 +374,7 @@ impl<S: Store + 'static> RaftNode<S> {
             store.apply_snapshot(snapshot.clone())?;
         }
 
-        if let Some(hs) = ready.hs() {
-            // Raft HardState changed, and we need to persist it.
-            let store = self.mut_store();
-            store.set_hard_state(hs)?;
-        }
-
-        let mut _last_apply_index: u64 = 0;
         for entry in ready.take_committed_entries() {
-            // Mostly, you need to save the last apply index to resume applying
-            // after restart. Here we just ignore this because we use a Memory storage.
-            _last_apply_index = entry.get_index();
-
             if entry.get_data().is_empty() {
                 // Emtpy entry, when the peer becomes Leader it will send an empty entry.
                 continue;
@@ -411,7 +388,67 @@ impl<S: Store + 'static> RaftNode<S> {
                 EntryType::EntryConfChangeV2 => unimplemented!(),
             }
         }
-        self.advance(ready);
+
+        if !ready.entries().is_empty() {
+            let entries = ready.entries();
+            let store = self.mut_store();
+            store.append(entries)?;
+        }
+
+        if let Some(hs) = ready.hs() {
+            // Raft HardState changed, and we need to persist it.
+            let store = self.mut_store();
+            store.set_hard_state(hs)?;
+        }
+
+        let mut light_rd = self.advance(ready);
+
+        if let Some(commit) = light_rd.commit_index() {
+            let store = self.mut_store();
+            store.set_hard_state_comit(commit)?;
+        }
+
+        for vec_messages in light_rd.take_messages() {
+            for message in vec_messages {
+                debug!(
+                    "light ready message from {} to {}",
+                    message.get_from(),
+                    message.get_to()
+                );
+                let client = match self.peer_mut(message.get_to()) {
+                    Some(ref peer) => peer.client.clone(),
+                    None => continue,
+                };
+
+                let message_sender = MessageSender {
+                    client_id: message.get_to(),
+                    client: client.clone(),
+                    chan: self.snd.clone(),
+                    message,
+                    timeout: Duration::from_millis(100),
+                    max_retries: 5,
+                };
+                tokio::spawn(message_sender.send());
+            }
+        }
+
+        for entry in light_rd.take_committed_entries() {
+            if entry.get_data().is_empty() {
+                // Emtpy entry, when the peer becomes Leader it will send an empty entry.
+                continue;
+            }
+
+            match entry.get_entry_type() {
+                EntryType::EntryNormal => self.handle_normal(&entry, client_send).await?,
+                EntryType::EntryConfChange => {
+                    self.handle_config_change(&entry, client_send).await?
+                }
+                EntryType::EntryConfChangeV2 => unimplemented!(),
+            }
+        }
+
+        self.advance_apply();
+
         Ok(())
     }
 
