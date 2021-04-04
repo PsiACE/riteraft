@@ -388,6 +388,7 @@ impl<S: Store + 'static> RaftNode<S> {
                 EntryType::EntryConfChangeV2 => unimplemented!(),
             }
         }
+
         if !ready.entries().is_empty() {
             let entries = ready.entries();
             let store = self.mut_store();
@@ -399,6 +400,7 @@ impl<S: Store + 'static> RaftNode<S> {
             let store = self.mut_store();
             store.set_hard_state(hs)?;
         }
+
         let mut light_rd = self.advance(ready);
 
         if let Some(commit) = light_rd.commit_index() {
@@ -444,7 +446,9 @@ impl<S: Store + 'static> RaftNode<S> {
                 EntryType::EntryConfChangeV2 => unimplemented!(),
             }
         }
+
         self.advance_apply();
+
         Ok(())
     }
 

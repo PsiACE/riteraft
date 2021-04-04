@@ -220,7 +220,7 @@ impl HeedStorage {
         self.0.read()
     }
     // TODO: move to LogStore trait?
-    pub fn set_hard_state_comit(&mut self,comit:u64) -> Result<()> {
+    pub fn set_hard_state_comit(&mut self, comit: u64) -> Result<()> {
         let store = self.wl();
         let mut writer = store.env.write_txn()?;
         let mut hard_state = store.hard_state(&writer)?;
@@ -228,7 +228,7 @@ impl HeedStorage {
         store.set_hard_state(&mut writer, &hard_state)?;
         writer.commit()?;
         Ok(())
-    } 
+    }
 }
 
 impl LogStore for HeedStorage {
