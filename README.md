@@ -1,4 +1,4 @@
-# RiteRaft - A raft framework, for regular people 
+# RiteRaft - A raft framework, for regular people
 
 This is an attempt to create a layer on top of
 [tikv/raft-rs](https://github.com/tikv/raft-rs), that is easier to use and
@@ -53,10 +53,10 @@ impl Store for HashStore {
 }
 ```
 
-Only 3 methods need to be implemented for the Store: 
-- `Store::apply`: applies a commited entry to the store.  
-- `Store::snapshot`: returns snapshot data for the store. 
-- `Store::apply`: applies the snapshot passed as argument.
+Only 3 methods need to be implemented for the Store:
+- `Store::apply`: applies a commited entry to the store.
+- `Store::snapshot`: returns snapshot data for the store.
+- `Store::restore`: applies the snapshot passed as argument.
 
 ### running the raft
 
@@ -79,7 +79,7 @@ fn main() {
             (handle, mailbox)
         }
     };
-    
+
     tokio::join!(raft);
 }
 
@@ -87,3 +87,16 @@ fn main() {
 
 The `mailbox` gives you a way to interact with the raft, for sending a message, or leaving the cluster for example.
 
+
+## Credit
+
+This work is based on  [raft-frp](https://github.com/MarinPostma/raft-frp), but more adjustments and improvements have been made to the code .
+
+## License
+
+This library is licensed under either of:
+
+* MIT license [LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT
+* Apache License 2.0 [LICENSE-APACHE](LICENSE-APACHE) or https://opensource.org/licenses/Apache-2.0
+
+at your option.

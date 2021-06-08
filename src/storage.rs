@@ -16,6 +16,7 @@ use std::sync::Arc;
 pub trait LogStore: Storage {
     fn append(&mut self, entries: &[Entry]) -> Result<()>;
     fn set_hard_state(&mut self, hard_state: &HardState) -> Result<()>;
+    fn set_hard_state_comit(&mut self, comit: u64) -> Result<()>;
     fn set_conf_state(&mut self, conf_state: &ConfState) -> Result<()>;
     fn create_snapshot(&mut self, data: Vec<u8>) -> Result<()>;
     fn apply_snapshot(&mut self, snapshot: Snapshot) -> Result<()>;
@@ -82,9 +83,9 @@ impl HeedStorageCore {
         let conf_state = ConfState::default();
 
         let storage = Self {
-            metadata_db,
-            entries_db,
             env,
+            entries_db,
+            metadata_db,
         };
 
         let mut writer = storage.env.write_txn()?;
@@ -250,6 +251,16 @@ impl LogStore for HeedStorage {
         Ok(())
     }
 
+    fn set_hard_state_comit(&mut self, comit: u64) -> Result<()> {
+        let store = self.wl();
+        let mut writer = store.env.write_txn()?;
+        let mut hard_state = store.hard_state(&writer)?;
+        hard_state.set_commit(comit);
+        store.set_hard_state(&mut writer, &hard_state)?;
+        writer.commit()?;
+        Ok(())
+    }
+
     fn set_conf_state(&mut self, conf_state: &ConfState) -> Result<()> {
         let store = self.wl();
         let mut writer = store.env.write_txn()?;
@@ -283,7 +294,7 @@ impl LogStore for HeedStorage {
         let metadata = snapshot.get_metadata();
         let conf_state = metadata.get_conf_state();
         let mut hard_state = store.hard_state(&writer)?;
-        hard_state.set_term(metadata.term);
+        hard_state.set_term(std::cmp::max(hard_state.term, metadata.term));
         hard_state.set_commit(metadata.index);
         store.set_hard_state(&mut writer, &hard_state)?;
         store.set_conf_state(&mut writer, conf_state)?;

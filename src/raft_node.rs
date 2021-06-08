@@ -43,7 +43,7 @@ impl MessageSender {
                 Err(e) => {
                     if current_retry < self.max_retries {
                         current_retry += 1;
-                        tokio::time::delay_for(self.timeout).await;
+                        tokio::time::sleep(self.timeout).await;
                     } else {
                         debug!(
                             "error sending message after {} retries: {}",
@@ -105,7 +105,7 @@ pub struct RaftNode<S: Store> {
     last_snap_time: Instant,
 }
 
-impl<S: Store + 'static> RaftNode<S> {
+impl<S: Store + 'static + Send> RaftNode<S> {
     pub fn new_leader(
         rcv: mpsc::Receiver<Message>,
         snd: mpsc::Sender<Message>,
@@ -343,45 +343,24 @@ impl<S: Store + 'static> RaftNode<S> {
 
         let mut ready = self.ready();
 
-        if !ready.entries().is_empty() {
-            let entries = ready.entries();
-            let store = self.mut_store();
-            store.append(entries).unwrap();
+        if !ready.messages().is_empty() {
+            // Send out the messages.
+            self.send_messages(ready.take_messages());
         }
-
-        if let Some(hs) = ready.hs() {
-            // Raft HardState changed, and we need to persist it.
-            let store = self.mut_store();
-            store.set_hard_state(hs).unwrap();
-        }
-
-        for message in ready.messages.drain(..) {
-            debug!(
-                "message from {} to {}",
-                message.get_from(),
-                message.get_to()
-            );
-            let client = match self.peer_mut(message.get_to()) {
-                Some(ref peer) => peer.client.clone(),
-                None => continue,
-            };
-
-            let message_sender = MessageSender {
-                client_id: message.get_to(),
-                client: client.clone(),
-                chan: self.snd.clone(),
-                message,
-                timeout: Duration::from_millis(100),
-                max_retries: 5,
-            };
-            tokio::spawn(message_sender.send());
-        }
-
-        if !ready.snapshot().is_empty() {
+        if *ready.snapshot() != Snapshot::default() {
             let snapshot = ready.snapshot();
             self.store.restore(snapshot.get_data()).await?;
             let store = self.mut_store();
             store.apply_snapshot(snapshot.clone())?;
+        }
+
+        self.handle_committed_entries(ready.take_committed_entries(), client_send)
+            .await?;
+
+        if !ready.entries().is_empty() {
+            let entries = ready.entries();
+            let store = self.mut_store();
+            store.append(entries)?;
         }
 
         if let Some(hs) = ready.hs() {
@@ -390,28 +369,66 @@ impl<S: Store + 'static> RaftNode<S> {
             store.set_hard_state(hs)?;
         }
 
-        if let Some(committed_entries) = ready.committed_entries.take() {
-            let mut _last_apply_index = 0;
-            for entry in &committed_entries {
-                // Mostly, you need to save the last apply index to resume applying
-                // after restart. Here we just ignore this because we use a Memory storage.
-                _last_apply_index = entry.get_index();
+        if !ready.persisted_messages().is_empty() {
+            // Send out the persisted messages come from the node.
+            self.send_messages(ready.take_persisted_messages());
+        }
 
-                if entry.get_data().is_empty() {
-                    // Emtpy entry, when the peer becomes Leader it will send an empty entry.
-                    continue;
-                }
+        let mut light_rd = self.advance(ready);
 
-                match entry.get_entry_type() {
-                    EntryType::EntryNormal => self.handle_normal(&entry, client_send).await?,
-                    EntryType::EntryConfChange => {
-                        self.handle_config_change(&entry, client_send).await?
-                    }
-                    EntryType::EntryConfChangeV2 => unimplemented!(),
-                }
+        if let Some(commit) = light_rd.commit_index() {
+            let store = self.mut_store();
+            store.set_hard_state_comit(commit)?;
+        }
+
+        // Send out the messages.
+        self.send_messages(light_rd.take_messages());
+
+        // Apply all committed entries.
+        self.handle_committed_entries(light_rd.take_committed_entries(), client_send)
+            .await?;
+
+        self.advance_apply();
+
+        Ok(())
+    }
+
+    fn send_messages(&mut self, msgs: Vec<RaftMessage>) {
+        for msg in msgs {
+            debug!(
+                "light ready message from {} to {}",
+                msg.get_from(),
+                msg.get_to()
+            );
+            let client = match self.peer_mut(msg.get_to()) {
+                Some(ref peer) => peer.client.clone(),
+                None => continue,
+            };
+            let message_sender = MessageSender {
+                client_id: msg.get_to(),
+                client: client.clone(),
+                chan: self.snd.clone(),
+                message: msg,
+                timeout: Duration::from_millis(100),
+                max_retries: 5,
+            };
+            tokio::spawn(message_sender.send());
+        }
+    }
+
+    async fn handle_committed_entries(
+        &mut self,
+        committed_entries: Vec<Entry>,
+        client_send: &mut HashMap<u64, oneshot::Sender<RaftResponse>>,
+    ) -> Result<()> {
+        // Fitler out empty entries produced by new elected leaders.
+        for entry in committed_entries {
+            if let EntryType::EntryConfChange = entry.get_entry_type() {
+                self.handle_config_change(&entry, client_send).await?;
+            } else {
+                self.handle_normal(&entry, client_send).await?;
             }
         }
-        self.advance(ready);
         Ok(())
     }
 
