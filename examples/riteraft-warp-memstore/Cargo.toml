@@ -18,4 +18,4 @@ slog = "2"
 slog-stdlog = "4"
 structopt = "0.3"
 tokio = { version = "0.2", features = ["full"] }
-warp = "0.2"
+warp = "0.3"
