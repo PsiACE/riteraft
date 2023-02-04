@@ -20,7 +20,7 @@ raft = { git = "https://github.com/tikv/raft-rs.git", rev = "eec5ead3ebe8f790154
 serde = { version = "1.0", features = ["derive"] }
 slog = "2"
 thiserror = "1.0"
-tokio = { version = "0.2", features = ["full"] }
+tokio = { version = "1.16", features = ["full"] }
 tonic = "0.3"
 
 [build-dependencies]
