@@ -19,4 +19,4 @@ slog-term = "2"
 slog = "2"
 slog-stdlog = "4"
 structopt = "0.3"
-tokio = { version = "0.2", features = ["full"] }
+tokio = { version = "1.16", features = ["full"] }
