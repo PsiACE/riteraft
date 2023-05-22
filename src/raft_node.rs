@@ -423,6 +423,10 @@ impl<S: Store + 'static + Send> RaftNode<S> {
     ) -> Result<()> {
         // Fitler out empty entries produced by new elected leaders.
         for entry in committed_entries {
+            if entry.get_data().is_empty() {
+                continue;
+            }
+
             if let EntryType::EntryConfChange = entry.get_entry_type() {
                 self.handle_config_change(&entry, client_send).await?;
             } else {
