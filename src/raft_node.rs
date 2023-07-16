@@ -423,6 +423,10 @@ impl<S: Store + 'static + Send> RaftNode<S> {
     ) -> Result<()> {
         // Fitler out empty entries produced by new elected leaders.
         for entry in committed_entries {
+            if entry.get_data().is_empty() {
+                // Emtpy entry, when the peer becomes Leader it will send an empty entry.
+                continue;
+            }
             if let EntryType::EntryConfChange = entry.get_entry_type() {
                 self.handle_config_change(&entry, client_send).await?;
             } else {
@@ -467,7 +471,7 @@ impl<S: Store + 'static + Send> RaftNode<S> {
                 let store = self.mut_store();
                 store.set_conf_state(&cs)?;
                 store.compact(last_applied)?;
-                let _ = store.create_snapshot(snapshot)?;
+                let _ = store.create_snapshot(snapshot, entry.index, entry.term)?;
             }
         }
 
@@ -505,7 +509,7 @@ impl<S: Store + 'static + Send> RaftNode<S> {
             let snapshot = self.store.snapshot().await?;
             let store = self.mut_store();
             store.compact(last_applied).unwrap();
-            let _ = store.create_snapshot(snapshot);
+            let _ = store.create_snapshot(snapshot, entry.index, entry.term);
         }
         Ok(())
     }
