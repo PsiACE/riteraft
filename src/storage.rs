@@ -18,7 +18,7 @@ pub trait LogStore: Storage {
     fn set_hard_state(&mut self, hard_state: &HardState) -> Result<()>;
     fn set_hard_state_comit(&mut self, comit: u64) -> Result<()>;
     fn set_conf_state(&mut self, conf_state: &ConfState) -> Result<()>;
-    fn create_snapshot(&mut self, data: Vec<u8>) -> Result<()>;
+    fn create_snapshot(&mut self, data: Vec<u8>, index: u64, term: u64) -> Result<()>;
     fn apply_snapshot(&mut self, snapshot: Snapshot) -> Result<()>;
     fn compact(&mut self, index: u64) -> Result<()>;
 }
@@ -269,10 +269,9 @@ impl LogStore for HeedStorage {
         Ok(())
     }
 
-    fn create_snapshot(&mut self, data: Vec<u8>) -> Result<()> {
+    fn create_snapshot(&mut self, data: Vec<u8>, index: u64, term: u64) -> Result<()> {
         let store = self.wl();
         let mut writer = store.env.write_txn()?;
-        let hard_state = store.hard_state(&writer)?;
         let conf_state = store.conf_state(&writer)?;
 
         let mut snapshot = Snapshot::default();
@@ -280,8 +279,8 @@ impl LogStore for HeedStorage {
 
         let meta = snapshot.mut_metadata();
         meta.set_conf_state(conf_state);
-        meta.index = hard_state.commit;
-        meta.term = hard_state.term;
+        meta.index = index;
+        meta.term = term;
 
         store.set_snapshot(&mut writer, &snapshot)?;
         writer.commit()?;
