@@ -23,3 +23,8 @@ tonic = "0.9"
 [build-dependencies]
 tonic-build = "0.9"
 
+[workspace]
+members = [
+    "examples/riteraft-memstore",
+    "examples/riteraft-warp-memstore"
+]

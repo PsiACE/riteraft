@@ -229,7 +229,15 @@ impl<S: Store + 'static + Send> RaftNode<S> {
     }
 
     // reserve a slot to insert node on next node addition commit
-    fn reserve_next_peer_id(&mut self) -> u64 {
+    fn reserve_next_peer_id(&mut self, addr: &str) -> u64 {
+        for (id, peer) in &mut self.peers.iter() {
+            if peer.as_ref().is_some_and(|x| x.addr == addr) {
+                let next_id = id.to_owned();
+                self.peers.insert(next_id, None);
+                return next_id.to_owned();
+            }
+        }
+
         let next_id = self.peers.keys().max().cloned().unwrap_or(1);
         // if assigned id is ourself, return next one
         let next_id = std::cmp::max(next_id + 1, self.id());
@@ -303,14 +311,18 @@ impl<S: Store + 'static + Send> RaftNode<S> {
                         self.propose(seq, proposal).unwrap();
                     }
                 }
-                Ok(Some(Message::RequestId { chan })) => {
+                Ok(Some(Message::RequestId { addr, chan })) => {
                     if !self.is_leader() {
                         // TODO: retry strategy in case of failure
                         info!("requested Id, but not leader");
                         self.send_wrong_leader(chan);
                     } else {
-                        let id = self.reserve_next_peer_id();
-                        chan.send(RaftResponse::IdReserved { id }).unwrap();
+                        chan.send(RaftResponse::IdReserved {
+                            leader_id: self.leader(),
+                            reserved_id: self.reserve_next_peer_id(&addr),
+                            peer_addrs: self.peer_addrs(),
+                        })
+                        .unwrap();
                     }
                 }
                 Ok(Some(Message::ReportUnreachable { node_id })) => {

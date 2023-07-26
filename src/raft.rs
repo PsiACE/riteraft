@@ -3,7 +3,7 @@ use crate::message::{Message, RaftResponse};
 use crate::raft_node::RaftNode;
 use crate::raft_server::RaftServer;
 use crate::raft_service::raft_service_client::RaftServiceClient;
-use crate::raft_service::{Empty, ResultCode};
+use crate::raft_service::{RequestIdArgs, ResultCode};
 
 use async_trait::async_trait;
 use bincode::{deserialize, serialize};
@@ -13,6 +13,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
 use tonic::Request;
 
+use std::collections::HashMap;
 use std::time::Duration;
 
 #[async_trait]
@@ -109,11 +110,12 @@ impl<S: Store + Send + Sync + 'static> Raft<S> {
         // 1. try to discover the leader and obtain an id from it.
         info!("attempting to join peer cluster at {}", addr);
         let mut leader_addr = addr.to_string();
-
-        let (leader_id, node_id): (u64, u64) = loop {
+        let (leader_id, node_id, peer_addrs): (u64, u64, HashMap<u64, String>) = loop {
             let mut client = RaftServiceClient::connect(format!("http://{}", leader_addr)).await?;
             let response = client
-                .request_id(Request::new(Empty::default()))
+                .request_id(Request::new(RequestIdArgs {
+                    addr: self.addr.clone(),
+                }))
                 .await?
                 .into_inner();
             match response.code() {
@@ -124,7 +126,9 @@ impl<S: Store + Send + Sync + 'static> Raft<S> {
                     info!("Wrong leader, retrying with leader at {}", leader_addr);
                     continue;
                 }
-                ResultCode::Ok => break deserialize(&response.data)?,
+                ResultCode::Ok => {
+                    break deserialize(&response.data)?;
+                }
                 ResultCode::Error => return Err(Error::JoinError),
             }
         };
@@ -134,6 +138,9 @@ impl<S: Store + Send + Sync + 'static> Raft<S> {
         let addr = self.addr.clone();
         let mut node =
             RaftNode::new_follower(self.rx, self.tx.clone(), node_id, self.store, &self.logger)?;
+        for (id, peer_addr) in peer_addrs.iter() {
+            node.add_peer(peer_addr, id.to_owned()).await?;
+        }
         node.add_peer(&leader_addr, leader_id).await?;
         let mut client = node.peer_mut(leader_id).unwrap().clone();
         let server = RaftServer::new(self.tx, addr);
