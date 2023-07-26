@@ -14,8 +14,6 @@ pub enum Error {
     RemoteCall(#[from] tonic::Status),
     #[error("io error: {0}")]
     Io(String),
-    #[error("database error: `{0}`")]
-    Database(#[from] heed::Error),
     #[error("unexpected error")]
     Other(#[source] Box<dyn std::error::Error + Sync + Send + 'static>),
     #[error("unexpected error")]

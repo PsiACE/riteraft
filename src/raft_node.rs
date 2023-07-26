@@ -7,7 +7,7 @@ use crate::error::Result;
 use crate::message::{Message, RaftResponse};
 use crate::raft::Store;
 use crate::raft_service::raft_service_client::RaftServiceClient;
-use crate::storage::{HeedStorage, LogStore};
+use crate::storage::{LogStore, MemStorage};
 
 use bincode::{deserialize, serialize};
 use log::*;
@@ -94,7 +94,7 @@ impl Peer {
 }
 
 pub struct RaftNode<S: Store> {
-    inner: RawNode<HeedStorage>,
+    inner: RawNode<MemStorage>,
     // the peer is optional, because an id can be reserved and later populated
     pub peers: HashMap<u64, Option<Peer>>,
     pub rcv: mpsc::Receiver<Message>,
@@ -132,7 +132,7 @@ impl<S: Store + 'static + Send> RaftNode<S> {
         s.mut_metadata().term = 1;
         s.mut_metadata().mut_conf_state().voters = vec![1];
 
-        let mut storage = HeedStorage::create(".", 1).unwrap();
+        let mut storage = MemStorage::create();
         storage.apply_snapshot(s).unwrap();
         let mut inner = RawNode::new(&config, storage, logger).unwrap();
         let peers = HashMap::new();
@@ -173,7 +173,7 @@ impl<S: Store + 'static + Send> RaftNode<S> {
 
         config.validate().unwrap();
 
-        let storage = HeedStorage::create(".", id)?;
+        let storage = MemStorage::create();
         let inner = RawNode::new(&config, storage, logger)?;
         let peers = HashMap::new();
         let seq = AtomicU64::new(0);
@@ -358,7 +358,7 @@ impl<S: Store + 'static + Send> RaftNode<S> {
             .await?;
 
         if !ready.entries().is_empty() {
-            let entries = ready.entries();
+            let entries = &ready.entries()[..];
             let store = self.mut_store();
             store.append(entries)?;
         }
@@ -471,7 +471,7 @@ impl<S: Store + 'static + Send> RaftNode<S> {
                 let store = self.mut_store();
                 store.set_conf_state(&cs)?;
                 store.compact(last_applied)?;
-                let _ = store.create_snapshot(snapshot, entry.index, entry.term)?;
+                store.create_snapshot(snapshot)?;
             }
         }
 
@@ -496,7 +496,7 @@ impl<S: Store + 'static + Send> RaftNode<S> {
         entry: &Entry,
         senders: &mut HashMap<u64, oneshot::Sender<RaftResponse>>,
     ) -> Result<()> {
-        let seq: u64 = deserialize(&entry.get_context())?;
+        let seq: u64 = deserialize(entry.get_context())?;
         let data = self.store.apply(entry.get_data()).await?;
         if let Some(sender) = senders.remove(&seq) {
             sender.send(RaftResponse::Response { data }).unwrap();
@@ -509,14 +509,14 @@ impl<S: Store + 'static + Send> RaftNode<S> {
             let snapshot = self.store.snapshot().await?;
             let store = self.mut_store();
             store.compact(last_applied).unwrap();
-            let _ = store.create_snapshot(snapshot, entry.index, entry.term);
+            let _ = store.create_snapshot(snapshot);
         }
         Ok(())
     }
 }
 
 impl<S: Store> Deref for RaftNode<S> {
-    type Target = RawNode<HeedStorage>;
+    type Target = RawNode<MemStorage>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
