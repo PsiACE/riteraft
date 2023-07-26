@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::message::{Message, RaftResponse};
 use crate::raft_service::raft_service_server::{RaftService, RaftServiceServer};
-use crate::raft_service::{self, Empty};
+use crate::raft_service::{self, RequestIdArgs};
 
 use bincode::serialize;
 use log::{error, info, warn};
@@ -42,11 +42,13 @@ impl RaftServer {
 impl RaftService for RaftServer {
     async fn request_id(
         &self,
-        _: Request<Empty>,
+        requset: Request<RequestIdArgs>,
     ) -> Result<Response<raft_service::IdRequestReponse>, Status> {
-        let mut sender = self.snd.clone();
+        let sender = self.snd.clone();
         let (tx, rx) = oneshot::channel();
-        let _ = sender.send(Message::RequestId { chan: tx }).await;
+        let RequestIdArgs { addr } = requset.get_ref();
+        let addr = addr.to_owned();
+        let _ = sender.send(Message::RequestId { addr, chan: tx }).await;
         let response = rx.await.unwrap();
         match response {
             RaftResponse::WrongLeader {
@@ -59,9 +61,13 @@ impl RaftService for RaftServer {
                     data: serialize(&(leader_id, leader_addr)).unwrap(),
                 }))
             }
-            RaftResponse::IdReserved { id } => Ok(Response::new(raft_service::IdRequestReponse {
+            RaftResponse::IdReserved {
+                leader_id,
+                reserved_id,
+                peer_addrs,
+            } => Ok(Response::new(raft_service::IdRequestReponse {
                 code: raft_service::ResultCode::Ok as i32,
-                data: serialize(&(1u64, id)).unwrap(),
+                data: serialize(&(leader_id, reserved_id, peer_addrs)).unwrap(),
             })),
             _ => unreachable!(),
         }
@@ -72,7 +78,7 @@ impl RaftService for RaftServer {
         req: Request<ConfChange>,
     ) -> Result<Response<raft_service::RaftResponse>, Status> {
         let change = req.into_inner();
-        let mut sender = self.snd.clone();
+        let sender = self.snd.clone();
 
         let (tx, rx) = oneshot::channel();
 
@@ -106,7 +112,7 @@ impl RaftService for RaftServer {
     ) -> Result<Response<raft_service::RaftResponse>, Status> {
         let message = request.into_inner();
         // again this ugly shit to serialize the message
-        let mut sender = self.snd.clone();
+        let sender = self.snd.clone();
         match sender.send(Message::Raft(Box::new(message))).await {
             Ok(_) => (),
             Err(_) => error!("send error"),

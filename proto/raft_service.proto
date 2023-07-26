@@ -4,7 +4,7 @@ package raftservice;
 import "eraftpb.proto";
 
 service RaftService {
-  rpc RequestId(Empty) returns (IdRequestReponse) {}
+  rpc RequestId(RequestIdArgs) returns (IdRequestReponse) {}
   rpc ChangeConfig(eraftpb.ConfChange) returns (RaftResponse) {}
   rpc SendMessage(eraftpb.Message) returns (RaftResponse) {}
 }
@@ -24,7 +24,9 @@ message IdRequestReponse{
   bytes data = 2;
 }
 
-message Empty {}
+message RequestIdArgs {
+  string addr = 1;
+}
 
 message Entry {
   uint64 key    = 1; 

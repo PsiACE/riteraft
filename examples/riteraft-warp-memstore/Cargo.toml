@@ -2,7 +2,7 @@
 name = "riteraft-warp-memstore"
 version = "0.1.0"
 authors = ["Chojan Shang <psiace@outlook.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -17,5 +17,5 @@ slog-term = "2"
 slog = "2"
 slog-stdlog = "4"
 structopt = "0.3"
-tokio = { version = "0.2", features = ["full"] }
-warp = "0.2"
+tokio = { version = "1", features = ["full"] }
+warp = "0.3"
