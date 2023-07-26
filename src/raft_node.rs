@@ -358,7 +358,7 @@ impl<S: Store + 'static + Send> RaftNode<S> {
             .await?;
 
         if !ready.entries().is_empty() {
-            let entries = ready.entries();
+            let entries = &ready.entries()[..];
             let store = self.mut_store();
             store.append(entries)?;
         }
@@ -471,7 +471,7 @@ impl<S: Store + 'static + Send> RaftNode<S> {
                 let store = self.mut_store();
                 store.set_conf_state(&cs)?;
                 store.compact(last_applied)?;
-                let _ = store.create_snapshot(snapshot, entry.index, entry.term)?;
+                store.create_snapshot(snapshot, entry.index, entry.term)?;
             }
         }
 
@@ -496,7 +496,7 @@ impl<S: Store + 'static + Send> RaftNode<S> {
         entry: &Entry,
         senders: &mut HashMap<u64, oneshot::Sender<RaftResponse>>,
     ) -> Result<()> {
-        let seq: u64 = deserialize(&entry.get_context())?;
+        let seq: u64 = deserialize(entry.get_context())?;
         let data = self.store.apply(entry.get_data()).await?;
         if let Some(sender) = senders.remove(&seq) {
             sender.send(RaftResponse::Response { data }).unwrap();

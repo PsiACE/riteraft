@@ -6,7 +6,7 @@ use heed_traits::{BytesDecode, BytesEncode};
 use log::{info, warn};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use prost::Message;
-use raft::prelude::*;
+use raft::{prelude::*, GetEntriesContext};
 
 use std::borrow::Cow;
 use std::fs;
@@ -35,8 +35,7 @@ macro_rules! heed_type {
         impl<'a> BytesEncode<'a> for $heed_type {
             type EItem = $type;
             fn bytes_encode(item: &'a Self::EItem) -> Option<Cow<'a, [u8]>> {
-                let mut bytes = vec![];
-                prost::Message::encode(item, &mut bytes).ok()?;
+                let bytes = prost::Message::encode_to_vec(item);
                 Some(Cow::Owned(bytes))
             }
         }
@@ -44,7 +43,7 @@ macro_rules! heed_type {
         impl<'a> BytesDecode<'a> for $heed_type {
             type DItem = $type;
             fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-                prost::Message::decode(bytes).ok()
+                prost::Message::decode(bytes).ok().into()
             }
         }
     };
@@ -192,7 +191,7 @@ impl HeedStorageCore {
     }
 
     fn append(&self, writer: &mut heed::RwTxn, entries: &[Entry]) -> Result<()> {
-        let mut last_index = self.last_index(&writer)?;
+        let mut last_index = self.last_index(writer)?;
         // TODO: ensure entry arrive in the right order
         for entry in entries {
             //assert_eq!(entry.get_index(), last_index + 1);
@@ -327,6 +326,7 @@ impl Storage for HeedStorage {
         low: u64,
         high: u64,
         max_size: impl Into<Option<u64>>,
+        _context: GetEntriesContext,
     ) -> raft::Result<Vec<Entry>> {
         let store = self.rl();
         let entries = store
@@ -386,7 +386,7 @@ impl Storage for HeedStorage {
         Ok(last_index)
     }
 
-    fn snapshot(&self, _index: u64) -> raft::Result<Snapshot> {
+    fn snapshot(&self, _request_index: u64, _to: u64) -> raft::Result<Snapshot> {
         let store = self.rl();
         match store.snapshot() {
             Ok(Some(snapshot)) => Ok(snapshot),
