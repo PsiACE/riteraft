@@ -15,7 +15,9 @@ pub enum RaftResponse {
         peer_addrs: HashMap<u64, String>,
     },
     IdReserved {
-        id: u64,
+        leader_id: u64,
+        reserved_id: u64,
+        peer_addrs: HashMap<u64, String>,
     },
     Error,
     Response {
@@ -35,6 +37,7 @@ pub enum Message {
         chan: Sender<RaftResponse>,
     },
     RequestId {
+        addr: String,
         chan: Sender<RaftResponse>,
     },
     ReportUnreachable {
