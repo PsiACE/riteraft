@@ -18,5 +18,6 @@ slog-async = "2"
 slog-term = "2"
 slog = "2"
 slog-stdlog = "4"
+slog-scope = "4.4"
 structopt = "0.3"
 tokio = { version = "1", features = ["full"] }
